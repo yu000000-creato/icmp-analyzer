@@ -701,14 +701,16 @@ class ICMPAnalyzerGUI:
         
     def _add_packet_to_tree(self, packet: ICMPPacket, index: int):
         """添加报文到列表"""
-        type_name = packet.type.name if packet.type else str(packet.header.type)
+        type_name = self.analyzer.TYPE_DESCRIPTIONS.get(packet.header.type, f"未知类型 ({packet.header.type})")
         code_str = str(packet.header.code)
         checksum = f"0x{packet.header.checksum:04X}"
         ident = f"0x{packet.header.identifier:04X}" if packet.header.identifier else "-"
-        seq = str(packet.header.sequence_number) if packet.header.sequence_number else "-"
-        src_ip = packet.src_ip or "-"
-        dst_ip = packet.dst_ip or "-"
-        category = "查询报文" if packet.category == "query" else "差错报文"
+        seq = str(packet.header.sequence) if packet.header.sequence else "-"
+        
+        src_ip = packet.original_ip_header.source_ip if packet.original_ip_header else "-"
+        dst_ip = packet.original_ip_header.dest_ip if packet.original_ip_header else "-"
+        
+        category = "查询报文" if self.analyzer.is_query_message(packet.header.type) else "差错报文"
         
         self.packet_tree.insert('', tk.END, values=(
             index, type_name, code_str, checksum, ident, seq, src_ip, dst_ip, category
