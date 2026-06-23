@@ -1,12 +1,27 @@
 # ICMP差错报文分析程序
 
-![Version](https://img.shields.io/badge/version-v1.0.0-blue)
+![Version](https://img.shields.io/badge/version-v1.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.7+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
 ## 项目简介
 
 本程序是一个完整的ICMP差错报文分析工具，严格遵循RFC792协议标准，能够独立完成ICMP报文的二进制解析，区分查询报文与差错报文，还原ICMP协助IP协议差错报告、路径探测的底层工作逻辑。
+
+## 更新日志
+
+### v1.1.0 (2026-06-23)
+- **修复**: 统计面板正确区分ICMP差错报文与校验和错误报文
+- **优化**: 离线文件模式添加文件验证（检查是否为目录、文件格式验证）
+- **优化**: 使用标准tkinter.messagebox替代ttkbootstrap.dialogs.Messagebox确保弹窗正常显示
+- **优化**: 实时抓包Npcap接口检测与服务状态检查
+
+### v1.0.0 (2026-06-22)
+- 实现ICMP报文全类型解析（Echo、Destination Unreachable、Time Exceeded等）
+- 支持实时网卡抓包、离线pcap文件、二进制样本三种模式
+- 图形化界面（tkinter + ttkbootstrap暗黑主题）
+- 统计报表功能
+- ICMP校验和验证
 
 ## 项目地址
 

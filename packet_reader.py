@@ -44,6 +44,7 @@ class LivePacketReader(PacketReader):
         self.timeout = timeout
         self.packet_count = packet_count
         self._callback: Optional[Callable] = None
+        self._stopped = False
         
     def read(self) -> Generator[bytes, None, None]:
         """实时抓取ICMP报文"""
@@ -51,6 +52,10 @@ class LivePacketReader(PacketReader):
             yield from self._read_with_scapy()
         else:
             yield from self._read_with_socket()
+    
+    def stop(self):
+        """停止抓包"""
+        self._stopped = True
     
     def _read_with_scapy(self) -> Generator[bytes, None, None]:
         """使用Scapy进行抓包"""
@@ -61,18 +66,25 @@ class LivePacketReader(PacketReader):
                 if self.interface in mapping:
                     iface_to_use = mapping[self.interface]
             
+            count_value = self.packet_count if self.packet_count > 0 else 0
+            
             packets = sniff(
                 iface=iface_to_use,
                 filter="icmp",
                 timeout=self.timeout,
-                count=self.packet_count if self.packet_count > 0 else None,
+                count=count_value,
                 prn=lambda x: None,
                 store=True
             )
             
             for pkt in packets:
+                if self._stopped:
+                    break
                 if ICMP in pkt:
-                    yield bytes(pkt[ICMP])
+                    icmp_bytes = bytes(pkt[ICMP])
+                    if self._callback:
+                        self._callback(icmp_bytes)
+                    yield icmp_bytes
                     
         except PermissionError:
             raise PermissionError("实时抓包需要管理员权限。请以管理员身份运行程序。")

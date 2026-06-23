@@ -117,6 +117,7 @@ class ICMPAnalyzer:
         self.packet_count = 0
         self.type_stats: Dict[int, int] = {}
         self.error_count = 0
+        self.checksum_error_count = 0
         
     def parse_icmp_header(self, data: bytes) -> Optional[ICMPHeader]:
         """解析ICMP首部"""
@@ -286,6 +287,10 @@ class ICMPAnalyzer:
         self.packet_count += 1
         self.type_stats[header.type] = self.type_stats.get(header.type, 0) + 1
         if not checksum_valid:
+            self.checksum_error_count += 1
+        
+        if header.type in [ICMPType.DESTINATION_UNREACHABLE, ICMPType.SOURCE_QUENCH, 
+                          ICMPType.REDIRECT, ICMPType.TIME_EXCEEDED, ICMPType.PARAMETER_PROBLEM]:
             self.error_count += 1
         
         return ICMPPacket(
@@ -365,6 +370,7 @@ class ICMPAnalyzer:
             'total_packets': self.packet_count,
             'type_distribution': dict(self.type_stats),
             'error_packets': self.error_count,
+            'checksum_errors': self.checksum_error_count,
             'type_percentages': {
                 k: (v / self.packet_count * 100) if self.packet_count > 0 else 0 
                 for k, v in self.type_stats.items()
