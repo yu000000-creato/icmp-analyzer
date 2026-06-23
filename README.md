@@ -10,7 +10,7 @@
 
 ## 项目地址
 
-- **GitHub**: https://github.com/yu0000000-creato/icmp-analyzer
+- **GitHub**: https://github.com/yu000000-creato/icmp-analyzer
 
 ## 功能特性
 
