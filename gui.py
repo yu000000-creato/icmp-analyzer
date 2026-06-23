@@ -264,6 +264,45 @@ class ICMPAnalyzerGUI:
                                      bg=COLORS['bg_card'])
         self.param_arrow.pack(side=tk.RIGHT)
         
+        # 操作按钮（始终显示，不属于抓包参数）
+        btn_frame = tk.Frame(card, bg=COLORS['bg_card'])
+        btn_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
+        
+        self.start_btn = tk.Button(btn_frame, text="开始分析",
+                                  bg=COLORS['accent_blue'], fg='white',
+                                  font=FONTS['label_bold'],
+                                  relief=tk.FLAT, cursor='hand2',
+                                  command=self._start_analysis)
+        self.start_btn.pack(fill=tk.X, pady=(0, 8), ipady=12)
+        
+        action_frame = tk.Frame(card, bg=COLORS['bg_card'])
+        action_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
+        
+        tk.Button(action_frame, text="清空结果",
+                 bg=COLORS['bg_highlight'], fg=COLORS['text_primary'],
+                 font=FONTS['label'], relief=tk.FLAT, cursor='hand2',
+                 command=self._clear_results).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8)
+        
+        tk.Button(action_frame, text="生成报告",
+                 bg=COLORS['bg_highlight'], fg=COLORS['text_primary'],
+                 font=FONTS['label'], relief=tk.FLAT, cursor='hand2',
+                 command=self._show_statistics).pack(side=tk.RIGHT, fill=tk.X, expand=True, ipady=8, padx=(8, 0))
+        
+        # 状态栏（始终显示）
+        status_frame = tk.Frame(card, bg=COLORS['bg_card'])
+        status_frame.pack(fill=tk.X, padx=16, pady=(0, 8))
+        
+        self.status_var = tk.StringVar(value="● 就绪")
+        tk.Label(status_frame, textvariable=self.status_var, 
+                font=FONTS['label'], fg=COLORS['accent_green'],
+                bg=COLORS['bg_card']).pack(side=tk.LEFT)
+        
+        self.total_count_var = tk.StringVar(value="报文总数: 0")
+        tk.Label(status_frame, textvariable=self.total_count_var,
+                font=FONTS['label'], fg=COLORS['text_secondary'],
+                bg=COLORS['bg_card']).pack(side=tk.RIGHT)
+        
+        # 抓包参数区域（可收起/展开）
         self.param_frame = tk.Frame(card, bg=COLORS['bg_card'])
         self.param_frame.pack(fill=tk.X, padx=16, pady=(0, 16))
         self.param_visible = True
@@ -293,44 +332,6 @@ class ICMPAnalyzerGUI:
                                 relief=tk.SOLID, bd=1,
                                 highlightbackground=COLORS['border'])
         timeout_entry.pack(fill=tk.X, ipady=6)
-        
-        # 操作按钮
-        btn_frame = tk.Frame(self.param_frame, bg=COLORS['bg_card'])
-        btn_frame.pack(fill=tk.X, pady=(12, 12))
-        
-        self.start_btn = tk.Button(btn_frame, text="开始分析",
-                                  bg=COLORS['accent_blue'], fg='white',
-                                  font=FONTS['label_bold'],
-                                  relief=tk.FLAT, cursor='hand2',
-                                  command=self._start_analysis)
-        self.start_btn.pack(fill=tk.X, pady=(0, 8), ipady=12)
-        
-        action_frame = tk.Frame(self.param_frame, bg=COLORS['bg_card'])
-        action_frame.pack(fill=tk.X)
-        
-        tk.Button(action_frame, text="清空结果",
-                 bg=COLORS['bg_highlight'], fg=COLORS['text_primary'],
-                 font=FONTS['label'], relief=tk.FLAT, cursor='hand2',
-                 command=self._clear_results).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8)
-        
-        tk.Button(action_frame, text="生成报告",
-                 bg=COLORS['bg_highlight'], fg=COLORS['text_primary'],
-                 font=FONTS['label'], relief=tk.FLAT, cursor='hand2',
-                 command=self._show_statistics).pack(side=tk.RIGHT, fill=tk.X, expand=True, ipady=8, padx=(8, 0))
-        
-        # 状态栏
-        status_frame = tk.Frame(self.param_frame, bg=COLORS['bg_card'])
-        status_frame.pack(fill=tk.X, pady=(0, 12))
-        
-        self.status_var = tk.StringVar(value="● 就绪")
-        tk.Label(status_frame, textvariable=self.status_var, 
-                font=FONTS['label'], fg=COLORS['accent_green'],
-                bg=COLORS['bg_card']).pack(side=tk.LEFT)
-        
-        self.total_count_var = tk.StringVar(value="报文总数: 0")
-        tk.Label(status_frame, textvariable=self.total_count_var,
-                font=FONTS['label'], fg=COLORS['text_secondary'],
-                bg=COLORS['bg_card']).pack(side=tk.RIGHT)
         
         self._on_mode_change()
         
