@@ -53,10 +53,10 @@ FONTS = {
     'subtitle': ('Microsoft YaHei', 15),
     'label': ('Microsoft YaHei', 13),
     'label_bold': ('Microsoft YaHei', 13, 'bold'),
-    'small': ('Microsoft YaHei', 12),
-    'tiny': ('Microsoft YaHei', 11),
-    'mono': ('Consolas', 12),
-    'mono_small': ('Consolas', 11),
+    'small': ('Microsoft YaHei', 15),
+    'tiny': ('Microsoft YaHei', 15),
+    'mono': ('Consolas', 15),
+    'mono_small': ('Consolas', 15),
 }
 
 
@@ -444,12 +444,16 @@ class ICMPAnalyzerGUI:
         list_frame = tk.Frame(self.data_frame, bg=COLORS['bg_card'])
         list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         
+        tree_style = ttk.Style()
+        tree_style.configure('Treeview', font=('Microsoft YaHei', 13))
+        tree_style.configure('Treeview.Heading', font=('Microsoft YaHei', 13, 'bold'))
+        
         columns = ('序号', '类型', '代码', '校验和', '标识符', '序列号', '源IP', '目的IP', '分类')
         self.packet_tree = ttk.Treeview(list_frame, columns=columns, 
                                         show='headings', height=12)
         
-        col_widths = {'序号': 50, '类型': 80, '代码': 60, '校验和': 80, 
-                     '标识符': 70, '序列号': 70, '源IP': 120, '目的IP': 120, '分类': 100}
+        col_widths = {'序号': 70, '类型': 180, '代码': 70, '校验和': 100, 
+                     '标识符': 80, '序列号': 80, '源IP': 140, '目的IP': 140, '分类': 100}
         for col in columns:
             self.packet_tree.heading(col, text=col, 
                                     command=lambda c=col: self._sort_tree(c))
@@ -589,21 +593,32 @@ class ICMPAnalyzerGUI:
             counts.append(count)
         
         fig, ax = plt.subplots(figsize=(6, 3), dpi=100)
+        fig.patch.set_facecolor('white')
         
         colors = ['#4a90e2', '#ff9500', '#27ae60', '#e74c3c', '#9b59b6', 
                   '#1abc9c', '#3498db', '#f39c12']
         
-        bars = ax.bar(range(len(labels)), counts, color=colors[:len(labels)])
-        ax.set_xlabel('ICMP类型', fontsize=10)
-        ax.set_ylabel('数量', fontsize=10)
-        ax.set_title('ICMP报文类型分布', fontsize=11, fontweight='bold')
+        bars = ax.bar(range(len(labels)), counts, color=colors[:len(labels)], 
+                     edgecolor='none')
+        
+        ax.set_xlabel('ICMP类型', fontsize=12, fontfamily='Microsoft YaHei')
+        ax.set_ylabel('数量', fontsize=12, fontfamily='Microsoft YaHei')
+        ax.set_title('ICMP报文类型分布', fontsize=13, fontweight='bold', 
+                    fontfamily='Microsoft YaHei')
         ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=30, ha='right', fontsize=8)
+        ax.set_xticklabels(labels, rotation=30, ha='right', fontsize=10,
+                          fontfamily='Microsoft YaHei')
+        ax.tick_params(axis='both', labelsize=10)
         
         for bar in bars:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height}', ha='center', va='bottom', fontsize=9)
+                    f'{height}', ha='center', va='bottom', fontsize=11)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('#d1d8e0')
+        ax.spines['bottom'].set_color('#d1d8e0')
         
         plt.tight_layout()
         
