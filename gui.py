@@ -8,7 +8,7 @@ from tkinter import scrolledtext, filedialog, ttk, messagebox
 import ttkbootstrap as ttkbs
 from ttkbootstrap.constants import *
 from ttkbootstrap.style import Style
-from ttkbootstrap.dialogs import Messagebox
+
 from typing import Optional, List, Dict, Any
 import threading
 import queue
@@ -59,7 +59,7 @@ class ICMPAnalyzerGUI:
     
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("ICMP差错报文分析程序 v1.0.0")
+        self.root.title("ICMP差错报文分析程序 v1.1.1")
         self.root.geometry("1400x900")
         self.root.minsize(1400, 900)
         
@@ -216,7 +216,7 @@ class ICMPAnalyzerGUI:
                                style='Title.TLabel')
         title_label.pack(side=tk.LEFT, padx=15)
         
-        version_label = ttk.Label(left_frame, text="v1.0.0",
+        version_label = ttk.Label(left_frame, text="v1.1.1",
                                  font=('Consolas', 9),
                                  foreground=COLORS['text_secondary'])
         version_label.pack(side=tk.LEFT, padx=5)
@@ -346,12 +346,14 @@ class ICMPAnalyzerGUI:
         
         ttk.Label(param_frame, text="(0=无限制)", style='Small.TLabel').pack(anchor=tk.W, pady=(0, 8))
         
-        ttk.Label(param_frame, text="超时时间(秒):", style='Small.TLabel').pack(anchor=tk.W, pady=(0, 3))
-        self.timeout_var = tk.StringVar(value="10")
+        ttk.Label(param_frame, text="最大抓包时间(秒):", style='Small.TLabel').pack(anchor=tk.W, pady=(0, 3))
+        self.timeout_var = tk.StringVar(value="0")
         timeout_entry = ttk.Entry(param_frame, textvariable=self.timeout_var,
                                   font=FONTS['mono_small'], width=20)
         timeout_entry.pack(fill=tk.X, pady=(0, 5))
         timeout_entry.bind('<FocusOut>', self._validate_timeout)
+        
+        ttk.Label(param_frame, text="(0=无限制)", style='Small.TLabel').pack(anchor=tk.W, pady=(0, 8))
         
         ttk.Separator(scrollable, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=10, pady=10)
         
@@ -414,14 +416,14 @@ class ICMPAnalyzerGUI:
             messagebox.showwarning("警告", "请输入有效的数字")
             
     def _validate_timeout(self, event):
-        """验证超时时间"""
+        """验证最大抓包时间"""
         try:
             val = int(self.timeout_var.get())
             if val < 0:
-                self.timeout_var.set("10")
-                messagebox.showwarning("警告", "超时时间不能为负数")
+                self.timeout_var.set("0")
+                messagebox.showwarning("警告", "最大抓包时间不能为负数")
         except ValueError:
-            self.timeout_var.set("10")
+            self.timeout_var.set("0")
             messagebox.showwarning("警告", "请输入有效的数字")
             
     def _clear_file_path(self):
@@ -468,7 +470,7 @@ class ICMPAnalyzerGUI:
         about_text = """
 🌐 ICMP差错报文分析程序
 
-版本: v1.0.0
+版本: v1.1.1
 作者: Network Tools
 日期: 2026
 
@@ -849,7 +851,6 @@ class ICMPAnalyzerGUI:
             
         self.empty_label.place_forget()
         self.status_var.set("● 正在分析...")
-        self.status_var.set("● 正在分析...")
         
         if mode == "sample":
             self._analyze_samples()
@@ -939,6 +940,9 @@ class ICMPAnalyzerGUI:
             self._finish_analysis()
             return
             
+        # 先启动队列处理
+        self._process_queue()
+            
         def capture_thread():
             try:
                 reader = LivePacketReader(
@@ -947,14 +951,17 @@ class ICMPAnalyzerGUI:
                     packet_count=count
                 )
                 
-                for i, data in enumerate(reader.read(), 1):
+                packet_index = [0]  # 使用列表以便在线程中修改
+                
+                for data in reader.read():
                     if not self.is_capturing:
                         break
-                        
+                    
+                    packet_index[0] += 1
                     packet = self.analyzer.analyze_packet(data)
                     if packet:
                         self.packets.append(packet)
-                        self.packet_queue.put((i, packet))
+                        self.packet_queue.put((packet_index[0], packet))
                         
                 self.packet_queue.put(None)
                 
@@ -964,7 +971,6 @@ class ICMPAnalyzerGUI:
                 self.packet_queue.put(("error", str(e)))
                 
         threading.Thread(target=capture_thread, daemon=True).start()
-        self._process_queue()
         
     def _process_queue(self):
         """处理队列中的数据"""
@@ -1120,7 +1126,7 @@ class ICMPAnalyzerGUI:
         total = stats['total_packets']
         error_count = stats['error_packets']
         checksum_errors = stats['checksum_errors']
-        valid_count = total - error_count - checksum_errors
+        valid_count = total - checksum_errors
         
         self.stat_cards['total'].config(text=str(total))
         self.stat_cards['error'].config(text=str(error_count))
@@ -1285,8 +1291,9 @@ class ICMPAnalyzerGUI:
         
         total = stats['total_packets']
         error_count = stats['error_packets']
-        valid_count = total - error_count
-        error_rate = (error_count / total * 100) if total > 0 else 0
+        checksum_errors = stats['checksum_errors']
+        valid_count = total - checksum_errors
+        error_rate = (checksum_errors / total * 100) if total > 0 else 0
         
         query_count = sum(v for k, v in stats['type_distribution'].items()
                          if self.analyzer.is_query_message(k))
@@ -1296,7 +1303,7 @@ class ICMPAnalyzerGUI:
         cards = [
             ("📦 总报文数", str(total), COLORS['accent_blue']),
             ("✅ 有效报文", str(valid_count), COLORS['accent_green']),
-            ("❌ 异常报文", str(error_count), COLORS['accent_red']),
+            ("❌ 校验和异常", str(checksum_errors), COLORS['accent_red']),
             ("⚠ 异常率", f"{error_rate:.1f}%", COLORS['accent_orange']),
         ]
         

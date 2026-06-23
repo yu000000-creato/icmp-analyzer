@@ -1,18 +1,16 @@
 """
 ICMP差错报文分析程序 - 报文读取模块
 支持实时网卡抓包和离线pcap文件读取
+基于Scapy+Npcap实现
 """
 
 import socket
 import struct
+import time
 from typing import Optional, List, Generator, Callable
 from pathlib import Path
 
-try:
-    from scapy.all import sniff, rdpcap, Ether, IP, ICMP, conf
-    SCAPY_AVAILABLE = True
-except ImportError:
-    SCAPY_AVAILABLE = False
+from scapy.all import sniff, rdpcap, IP, ICMP, conf
 
 
 class PacketReader:
@@ -29,14 +27,14 @@ class PacketReader:
 class LivePacketReader(PacketReader):
     """实时网卡抓包读取器"""
     
-    def __init__(self, interface: Optional[str] = None, timeout: int = 10, 
+    def __init__(self, interface: Optional[str] = None, timeout: int = 0, 
                  packet_count: int = 0):
         """
         初始化实时抓包读取器
         
         Args:
             interface: 网卡接口名称，None表示自动选择
-            timeout: 超时时间（秒）
+            timeout: 最大抓包时间（秒），0表示无限制
             packet_count: 抓包数量，0表示无限制
         """
         super().__init__()
@@ -45,20 +43,18 @@ class LivePacketReader(PacketReader):
         self.packet_count = packet_count
         self._callback: Optional[Callable] = None
         self._stopped = False
+        self._start_time = 0
         
     def read(self) -> Generator[bytes, None, None]:
-        """实时抓取ICMP报文"""
-        if SCAPY_AVAILABLE:
-            yield from self._read_with_scapy()
-        else:
-            yield from self._read_with_socket()
+        """实时抓取ICMP报文（使用Scapy+Npcap）"""
+        yield from self._read_with_scapy()
     
     def stop(self):
         """停止抓包"""
         self._stopped = True
     
     def _read_with_scapy(self) -> Generator[bytes, None, None]:
-        """使用Scapy进行抓包"""
+        """使用Scapy进行抓包（实时返回）"""
         try:
             iface_to_use = self.interface
             if self.interface:
@@ -66,61 +62,39 @@ class LivePacketReader(PacketReader):
                 if self.interface in mapping:
                     iface_to_use = mapping[self.interface]
             
-            count_value = self.packet_count if self.packet_count > 0 else 0
+            packet_index = 0
+            self._start_time = time.time()
             
-            packets = sniff(
-                iface=iface_to_use,
-                filter="icmp",
-                timeout=self.timeout,
-                count=count_value,
-                prn=lambda x: None,
-                store=True
-            )
+            timeout_value = 1 if self.timeout == 0 else min(self.timeout, 1)
             
-            for pkt in packets:
-                if self._stopped:
+            while not self._stopped:
+                packets = sniff(
+                    iface=iface_to_use,
+                    filter="icmp",
+                    timeout=timeout_value,
+                    count=5,
+                    prn=lambda x: None,
+                    store=True
+                )
+                
+                for pkt in packets:
+                    if self._stopped:
+                        break
+                    if ICMP in pkt:
+                        packet_index += 1
+                        icmp_bytes = bytes(pkt[ICMP])
+                        yield icmp_bytes
+                
+                if self.packet_count > 0 and packet_index >= self.packet_count:
                     break
-                if ICMP in pkt:
-                    icmp_bytes = bytes(pkt[ICMP])
-                    if self._callback:
-                        self._callback(icmp_bytes)
-                    yield icmp_bytes
+                
+                if self.timeout > 0 and (time.time() - self._start_time) >= self.timeout:
+                    break
                     
         except PermissionError:
             raise PermissionError("实时抓包需要管理员权限。请以管理员身份运行程序。")
         except Exception as e:
             raise RuntimeError(f"Scapy抓包失败: {e}")
-    
-    def _read_with_socket(self) -> Generator[bytes, None, None]:
-        """使用原生socket进行抓包（需要管理员权限）"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-            sock.settimeout(self.timeout)
-            
-            count = 0
-            while True:
-                if self.packet_count > 0 and count >= self.packet_count:
-                    break
-                    
-                try:
-                    data, addr = sock.recvfrom(65535)
-                    ip_header_length = (data[0] & 0x0F) * 4
-                    icmp_data = data[ip_header_length:]
-                    yield icmp_data
-                    count += 1
-                    
-                except socket.timeout:
-                    break
-                    
-        except PermissionError:
-            raise PermissionError("实时抓包需要管理员权限。请以管理员身份运行程序。")
-        except OSError as e:
-            if e.winerror == 10013:
-                raise PermissionError("实时抓包需要管理员权限。请以管理员身份运行程序。")
-            raise RuntimeError(f"Socket操作失败: {e}")
-        finally:
-            if 'sock' in locals():
-                sock.close()
     
     def set_callback(self, callback: Callable):
         """设置回调函数"""
@@ -145,10 +119,7 @@ class OfflinePacketReader(PacketReader):
     
     def read(self) -> Generator[bytes, None, None]:
         """从pcap文件读取ICMP报文"""
-        if SCAPY_AVAILABLE:
-            yield from self._read_with_scapy()
-        else:
-            yield from self._read_binary()
+        yield from self._read_with_scapy()
     
     def _read_with_scapy(self) -> Generator[bytes, None, None]:
         """使用Scapy读取pcap文件"""
@@ -159,7 +130,7 @@ class OfflinePacketReader(PacketReader):
                 if ICMP in pkt:
                     yield bytes(pkt[ICMP])
                 elif IP in pkt and pkt[IP].proto == 1:
-                    ip_header_len = (pkt[IP].version & 0x0F) * 4
+                    ip_header_len = pkt[IP].ihl * 4
                     icmp_data = bytes(pkt[IP])[ip_header_len:]
                     if len(icmp_data) >= 8:
                         yield icmp_data
@@ -275,28 +246,27 @@ def get_network_interfaces() -> List[str]:
     interfaces = []
     interface_set = set()
     
-    if SCAPY_AVAILABLE:
-        for iface_name, iface in conf.ifaces.items():
-            friendly_name = iface.name or ''
-            description = iface.description or ''
-            
-            if '本地连接*' in friendly_name:
-                continue
-            
-            display_name = friendly_name
-            
-            if 'Loopback' in description or '回环' in description:
-                display_name = '回环接口'
-            elif 'Wi-Fi' in description and 'Direct' not in description:
-                if friendly_name != 'WLAN':
-                    display_name = 'WLAN'
-            elif 'Ethernet' in description or '以太网' in description:
-                if friendly_name != '以太网':
-                    display_name = '以太网'
-            
-            if display_name and display_name not in interface_set:
-                interface_set.add(display_name)
-                interfaces.append(display_name)
+    for iface_name, iface in conf.ifaces.items():
+        friendly_name = iface.name or ''
+        description = iface.description or ''
+        
+        if '本地连接*' in friendly_name:
+            continue
+        
+        display_name = friendly_name
+        
+        if 'Loopback' in description or '回环' in description:
+            display_name = '回环接口'
+        elif 'Wi-Fi' in description and 'Direct' not in description:
+            if friendly_name != 'WLAN':
+                display_name = 'WLAN'
+        elif 'Ethernet' in description or '以太网' in description:
+            if friendly_name != '以太网':
+                display_name = '以太网'
+        
+        if display_name and display_name not in interface_set:
+            interface_set.add(display_name)
+            interfaces.append(display_name)
     
     if not interfaces:
         interfaces = ['回环接口', 'WLAN', '以太网']
@@ -315,8 +285,6 @@ def get_network_interfaces() -> List[str]:
 def get_interface_mapping() -> dict:
     """获取接口中文名称到scapy接口名的映射"""
     mapping = {}
-    if not SCAPY_AVAILABLE:
-        return mapping
     
     for iface_name, iface in conf.ifaces.items():
         friendly_name = iface.name or ''

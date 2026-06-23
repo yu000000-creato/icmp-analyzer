@@ -63,7 +63,7 @@ def run_cli_mode(args):
         print("[*] 开始实时抓包...\n")
         print("[!] 注意: 实时抓包需要管理员权限")
         print(f"[!] 接口: {args.interface if args.interface else '自动选择'}")
-        print(f"[!] 超时: {args.timeout} 秒")
+        print(f"[!] 最大抓包时间: {args.timeout if args.timeout > 0 else '无限制'}")
         print(f"[!] 数量: {args.count if args.count > 0 else '无限制'}\n")
         
         try:
@@ -100,7 +100,7 @@ def run_cli_mode(args):
         
         stats = analyzer.get_statistics()
         print(f"总报文数: {stats['total_packets']}")
-        print(f"校验和错误报文数: {stats['error_packets']}")
+        print(f"校验和错误报文数: {stats['checksum_errors']}")
         print()
         
         print("报文类型分布:")
@@ -178,8 +178,8 @@ def main():
     # 实时抓包参数
     parser.add_argument('--interface', '-i', type=str,
                        help='网卡接口名称')
-    parser.add_argument('--timeout', '-t', type=int, default=10,
-                       help='抓包超时时间(秒), 默认10秒')
+    parser.add_argument('--timeout', '-t', type=int, default=0,
+                       help='最大抓包时间(秒), 0表示无限制')
     parser.add_argument('--count', '-c', type=int, default=0,
                        help='抓包数量, 0表示无限制')
     

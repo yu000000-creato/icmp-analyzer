@@ -1,6 +1,6 @@
 # ICMP差错报文分析程序
 
-![Version](https://img.shields.io/badge/version-v1.1.0-blue)
+![Version](https://img.shields.io/badge/version-v1.1.1-blue)
 ![Python](https://img.shields.io/badge/python-3.7+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
@@ -9,6 +9,13 @@
 本程序是一个完整的ICMP差错报文分析工具，严格遵循RFC792协议标准，能够独立完成ICMP报文的二进制解析，区分查询报文与差错报文，还原ICMP协助IP协议差错报告、路径探测的底层工作逻辑。
 
 ## 更新日志
+
+### v1.1.1 (2026-06-23)
+- **优化**: 移除原生socket抓包方式，统一使用Scapy+Npcap实现
+- **优化**: 超时时间改为最大抓包时间，0表示无限制
+- **修复**: 统计面板有效报文计算逻辑错误
+- **修复**: IP首部长度解析错误
+- **新增**: 测试文档 TEST_DOCUMENT.md
 
 ### v1.1.0 (2026-06-23)
 - **修复**: 统计面板正确区分ICMP差错报文与校验和错误报文
@@ -148,8 +155,11 @@ python main.py --file capture.pcap --output result.txt
 # 基本抓包
 python main.py --live
 
-# 设置参数
+# 设置参数（timeout=0表示无限制）
 python main.py --live --timeout 30 --count 100
+
+# 无限制抓包（直到手动停止）
+python main.py --live --timeout 0
 
 # 指定网卡接口
 python main.py --live --interface 以太网 --timeout 60
