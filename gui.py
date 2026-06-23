@@ -11,6 +11,11 @@ import queue
 import time
 from pathlib import Path
 
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 from icmp_analyzer import ICMPAnalyzer, ICMPPacket, ICMPType
 from packet_reader import (
     LivePacketReader, OfflinePacketReader, BinarySampleReader,
@@ -509,15 +514,21 @@ class ICMPAnalyzerGUI:
         )
         
         # 统计信息（初始隐藏）
+        self.stats_frame = tk.Frame(self.detail_frame, bg=COLORS['bg_card'])
+        
         self.stats_text = scrolledtext.ScrolledText(
-            self.detail_frame, wrap=tk.WORD,
+            self.stats_frame, wrap=tk.WORD,
             font=FONTS['mono'],
             bg=COLORS['bg_card'], fg=COLORS['text_primary'],
             relief=tk.FLAT, bd=0,
             highlightthickness=1,
             highlightbackground=COLORS['border'],
-            padx=12, pady=8
+            padx=12, pady=8,
+            height=6
         )
+        self.stats_text.pack(fill=tk.X, pady=(0, 8))
+        self.stats_text.insert(tk.END, "选中一条报文后在此查看统计信息\n")
+        self.stats_text.config(state=tk.DISABLED)
         
     def _switch_top_tab(self, tab):
         """切换顶部标签"""
@@ -529,14 +540,14 @@ class ICMPAnalyzerGUI:
         
         self.fields_text.pack_forget()
         self.raw_text.pack_forget()
-        self.stats_text.pack_forget()
+        self.stats_frame.pack_forget()
         
         if tab == "fields":
             self.fields_text.pack(fill=tk.BOTH, expand=True)
         elif tab == "raw":
             self.raw_text.pack(fill=tk.BOTH, expand=True)
         elif tab == "stats":
-            self.stats_text.pack(fill=tk.BOTH, expand=True)
+            self.stats_frame.pack(fill=tk.BOTH, expand=True)
             self._update_stats_view()
             
     def _update_stats_view(self):
@@ -544,18 +555,61 @@ class ICMPAnalyzerGUI:
         self.stats_text.config(state=tk.NORMAL)
         self.stats_text.delete(1.0, tk.END)
         
+        if hasattr(self, 'stats_canvas'):
+            self.stats_canvas.get_tk_widget().pack_forget()
+            plt.close('all')
+        
         if not self.packets:
             self.stats_text.insert(tk.END, "暂无统计数据\n")
         else:
             stats = self.analyzer.get_statistics()
+            
             self.stats_text.insert(tk.END, f"报文总数: {stats['total_packets']}\n")
             self.stats_text.insert(tk.END, f"差错报文数: {stats['error_packets']}\n")
             self.stats_text.insert(tk.END, f"校验和错误数: {stats['checksum_errors']}\n")
             self.stats_text.insert(tk.END, "\n报文类型分布:\n")
             for ptype, count in stats['type_distribution'].items():
                 self.stats_text.insert(tk.END, f"  {ptype}: {count}\n")
+            
+            self._create_stats_chart(stats)
         
         self.stats_text.config(state=tk.DISABLED)
+    
+    def _create_stats_chart(self, stats):
+        """创建统计图表"""
+        type_dist = stats['type_distribution']
+        if not type_dist:
+            return
+        
+        labels = []
+        counts = []
+        for ptype, count in type_dist.items():
+            desc = self.analyzer.TYPE_DESCRIPTIONS.get(ptype, f"类型 {ptype}")
+            labels.append(desc)
+            counts.append(count)
+        
+        fig, ax = plt.subplots(figsize=(6, 3), dpi=100)
+        
+        colors = ['#4a90e2', '#ff9500', '#27ae60', '#e74c3c', '#9b59b6', 
+                  '#1abc9c', '#3498db', '#f39c12']
+        
+        bars = ax.bar(range(len(labels)), counts, color=colors[:len(labels)])
+        ax.set_xlabel('ICMP类型', fontsize=10)
+        ax.set_ylabel('数量', fontsize=10)
+        ax.set_title('ICMP报文类型分布', fontsize=11, fontweight='bold')
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=30, ha='right', fontsize=8)
+        
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height}', ha='center', va='bottom', fontsize=9)
+        
+        plt.tight_layout()
+        
+        self.stats_canvas = FigureCanvasTkAgg(fig, master=self.stats_frame)
+        self.stats_canvas.draw()
+        self.stats_canvas.get_tk_widget().pack(fill=tk.X, expand=True)
         
     def _browse_file(self):
         """浏览文件"""
