@@ -445,15 +445,15 @@ class ICMPAnalyzerGUI:
         list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         
         tree_style = ttk.Style()
-        tree_style.configure('Treeview', font=('Microsoft YaHei', 13))
-        tree_style.configure('Treeview.Heading', font=('Microsoft YaHei', 13, 'bold'))
+        tree_style.configure('Treeview', font=('Microsoft YaHei', 14), rowheight=35)
+        tree_style.configure('Treeview.Heading', font=('Microsoft YaHei', 14, 'bold'))
         
         columns = ('序号', '类型', '代码', '校验和', '标识符', '序列号', '源IP', '目的IP', '分类')
         self.packet_tree = ttk.Treeview(list_frame, columns=columns, 
                                         show='headings', height=12)
         
-        col_widths = {'序号': 70, '类型': 180, '代码': 70, '校验和': 100, 
-                     '标识符': 80, '序列号': 80, '源IP': 140, '目的IP': 140, '分类': 100}
+        col_widths = {'序号': 80, '类型': 200, '代码': 80, '校验和': 110, 
+                     '标识符': 90, '序列号': 90, '源IP': 150, '目的IP': 150, '分类': 110}
         for col in columns:
             self.packet_tree.heading(col, text=col, 
                                     command=lambda c=col: self._sort_tree(c))
