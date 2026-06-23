@@ -44,14 +44,14 @@ COLORS = {
 
 # ========== 字体配置 ==========
 FONTS = {
-    'title': ('Microsoft YaHei', 14, 'bold'),
-    'subtitle': ('Microsoft YaHei', 12),
-    'label': ('Microsoft YaHei', 10),
-    'label_bold': ('Microsoft YaHei', 10, 'bold'),
-    'small': ('Microsoft YaHei', 9),
-    'tiny': ('Microsoft YaHei', 8),
-    'mono': ('Consolas', 9),
-    'mono_small': ('Consolas', 8),
+    'title': ('Microsoft YaHei', 16, 'bold'),
+    'subtitle': ('Microsoft YaHei', 13),
+    'label': ('Microsoft YaHei', 11),
+    'label_bold': ('Microsoft YaHei', 11, 'bold'),
+    'small': ('Microsoft YaHei', 10),
+    'tiny': ('Microsoft YaHei', 9),
+    'mono': ('Consolas', 10),
+    'mono_small': ('Consolas', 9),
 }
 
 
@@ -219,10 +219,17 @@ class ICMPAnalyzerGUI:
         self.file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=6)
         self.file_entry.insert(0, "选择 .pcap 文件...")
         
+        select_btn = tk.Button(path_frame, text="浏览",
+                              bg=COLORS['accent_blue'], fg='white',
+                              font=FONTS['small'], relief=tk.FLAT,
+                              cursor='hand2',
+                              command=self._browse_file)
+        select_btn.pack(side=tk.RIGHT, padx=(4, 0))
+        
         tk.Button(path_frame, text="✕", width=3,
                  bg=COLORS['bg_card'], fg=COLORS['text_secondary'],
                  font=FONTS['small'], relief=tk.FLAT,
-                 command=self._clear_file_path).pack(side=tk.RIGHT, padx=(4, 0))
+                 command=self._clear_file_path).pack(side=tk.RIGHT, padx=(4, 4))
         
         # 网络接口
         tk.Label(card, text="网络接口", 
