@@ -270,11 +270,11 @@ class ICMPAnalyzerGUI:
         
         # 抓包数量
         tk.Label(self.param_frame, text="抓包数量", 
-                font=FONTS['small'], fg=COLORS['text_secondary'],
+                font=FONTS['label'], fg=COLORS['text_secondary'],
                 bg=COLORS['bg_card']).pack(anchor=tk.W, pady=(0, 4))
         self.count_var = tk.StringVar(value="0")
         count_entry = tk.Entry(self.param_frame, textvariable=self.count_var,
-                              font=FONTS['small'],
+                              font=FONTS['label'],
                               fg=COLORS['text_primary'],
                               bg=COLORS['bg_card'],
                               relief=tk.SOLID, bd=1,
@@ -283,11 +283,11 @@ class ICMPAnalyzerGUI:
         
         # 超时时间
         tk.Label(self.param_frame, text="超时时间 (秒)", 
-                font=FONTS['small'], fg=COLORS['text_secondary'],
+                font=FONTS['label'], fg=COLORS['text_secondary'],
                 bg=COLORS['bg_card']).pack(anchor=tk.W, pady=(0, 4))
         self.timeout_var = tk.StringVar(value="0")
         timeout_entry = tk.Entry(self.param_frame, textvariable=self.timeout_var,
-                                font=FONTS['small'],
+                                font=FONTS['label'],
                                 fg=COLORS['text_primary'],
                                 bg=COLORS['bg_card'],
                                 relief=tk.SOLID, bd=1,
@@ -295,8 +295,8 @@ class ICMPAnalyzerGUI:
         timeout_entry.pack(fill=tk.X, ipady=6)
         
         # 操作按钮
-        btn_frame = tk.Frame(card, bg=COLORS['bg_card'])
-        btn_frame.pack(fill=tk.X, padx=16, pady=(8, 16))
+        btn_frame = tk.Frame(self.param_frame, bg=COLORS['bg_card'])
+        btn_frame.pack(fill=tk.X, pady=(12, 12))
         
         self.start_btn = tk.Button(btn_frame, text="开始分析",
                                   bg=COLORS['accent_blue'], fg='white',
@@ -305,8 +305,8 @@ class ICMPAnalyzerGUI:
                                   command=self._start_analysis)
         self.start_btn.pack(fill=tk.X, pady=(0, 8), ipady=12)
         
-        action_frame = tk.Frame(card, bg=COLORS['bg_card'])
-        action_frame.pack(fill=tk.X, padx=16, pady=(0, 16))
+        action_frame = tk.Frame(self.param_frame, bg=COLORS['bg_card'])
+        action_frame.pack(fill=tk.X)
         
         tk.Button(action_frame, text="清空结果",
                  bg=COLORS['bg_highlight'], fg=COLORS['text_primary'],
@@ -319,17 +319,17 @@ class ICMPAnalyzerGUI:
                  command=self._show_statistics).pack(side=tk.RIGHT, fill=tk.X, expand=True, ipady=8, padx=(8, 0))
         
         # 状态栏
-        status_frame = tk.Frame(card, bg=COLORS['bg_card'])
-        status_frame.pack(fill=tk.X, padx=16, pady=(8, 16))
+        status_frame = tk.Frame(self.param_frame, bg=COLORS['bg_card'])
+        status_frame.pack(fill=tk.X, pady=(0, 12))
         
         self.status_var = tk.StringVar(value="● 就绪")
         tk.Label(status_frame, textvariable=self.status_var, 
-                font=FONTS['small'], fg=COLORS['accent_green'],
+                font=FONTS['label'], fg=COLORS['accent_green'],
                 bg=COLORS['bg_card']).pack(side=tk.LEFT)
         
         self.total_count_var = tk.StringVar(value="报文总数: 0")
         tk.Label(status_frame, textvariable=self.total_count_var,
-                font=FONTS['small'], fg=COLORS['text_secondary'],
+                font=FONTS['label'], fg=COLORS['text_secondary'],
                 bg=COLORS['bg_card']).pack(side=tk.RIGHT)
         
         self._on_mode_change()
@@ -380,6 +380,8 @@ class ICMPAnalyzerGUI:
         top_tab_names = [("概览", "overview"), ("类型", "type"), ("代码", "code"), 
                         ("检验和", "checksum"), ("分类", "category")]
         
+        self.top_tab_buttons = {}
+        
         for text, value in top_tab_names:
             if value == "overview":
                 btn = tk.Button(top_tabs, text=text,
@@ -393,6 +395,7 @@ class ICMPAnalyzerGUI:
                               padx=16, pady=4)
             btn.pack(side=tk.LEFT)
             btn.bind('<Button-1>', lambda e, v=value: self._switch_top_tab(v))
+            self.top_tab_buttons[value] = btn
         
         # 复制全部按钮
         tk.Button(top_tabs, text="复制全部",
@@ -474,6 +477,8 @@ class ICMPAnalyzerGUI:
         self.bottom_tab_var = tk.StringVar(value="fields")
         bottom_tab_names = [("字段解析", "fields"), ("原始数据", "raw"), ("统计信息", "stats")]
         
+        self.bottom_tab_buttons = {}
+        
         for text, value in bottom_tab_names:
             if value == "fields":
                 btn = tk.Button(bottom_tabs, text=text,
@@ -487,6 +492,7 @@ class ICMPAnalyzerGUI:
                               padx=16, pady=4)
             btn.pack(side=tk.LEFT, padx=(0, 8))
             btn.bind('<Button-1>', lambda e, v=value: self._switch_bottom_tab(v))
+            self.bottom_tab_buttons[value] = btn
         
         # 详情内容区
         self.detail_frame = tk.Frame(self.data_frame, bg=COLORS['bg_card'])
@@ -538,9 +544,21 @@ class ICMPAnalyzerGUI:
         """切换顶部标签"""
         self.top_tab_var.set(tab)
         
+        for value, btn in self.top_tab_buttons.items():
+            if value == tab:
+                btn.config(bg=COLORS['accent_blue'], fg='white')
+            else:
+                btn.config(bg=COLORS['bg_main'], fg=COLORS['text_secondary'])
+        
     def _switch_bottom_tab(self, tab):
         """切换底部详情标签"""
         self.bottom_tab_var.set(tab)
+        
+        for value, btn in self.bottom_tab_buttons.items():
+            if value == tab:
+                btn.config(bg=COLORS['accent_light'], fg=COLORS['accent_blue'])
+            else:
+                btn.config(bg=COLORS['bg_card'], fg=COLORS['text_secondary'])
         
         self.fields_text.pack_forget()
         self.raw_text.pack_forget()
@@ -601,19 +619,19 @@ class ICMPAnalyzerGUI:
         bars = ax.bar(range(len(labels)), counts, color=colors[:len(labels)], 
                      edgecolor='none')
         
-        ax.set_xlabel('ICMP类型', fontsize=12, fontfamily='Microsoft YaHei')
-        ax.set_ylabel('数量', fontsize=12, fontfamily='Microsoft YaHei')
-        ax.set_title('ICMP报文类型分布', fontsize=13, fontweight='bold', 
+        ax.set_xlabel('ICMP类型', fontsize=14, fontfamily='Microsoft YaHei')
+        ax.set_ylabel('数量', fontsize=14, fontfamily='Microsoft YaHei')
+        ax.set_title('ICMP报文类型分布', fontsize=16, fontweight='bold', 
                     fontfamily='Microsoft YaHei')
         ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=30, ha='right', fontsize=10,
+        ax.set_xticklabels(labels, rotation=0, ha='center', fontsize=13,
                           fontfamily='Microsoft YaHei')
-        ax.tick_params(axis='both', labelsize=10)
+        ax.tick_params(axis='both', labelsize=12)
         
         for bar in bars:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height}', ha='center', va='bottom', fontsize=11)
+                    f'{height}', ha='center', va='bottom', fontsize=13)
         
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
