@@ -49,14 +49,14 @@ COLORS = {
 
 # ========== 字体配置 ==========
 FONTS = {
-    'title': ('Microsoft YaHei', 16, 'bold'),
-    'subtitle': ('Microsoft YaHei', 13),
-    'label': ('Microsoft YaHei', 11),
-    'label_bold': ('Microsoft YaHei', 11, 'bold'),
-    'small': ('Microsoft YaHei', 10),
-    'tiny': ('Microsoft YaHei', 9),
-    'mono': ('Consolas', 10),
-    'mono_small': ('Consolas', 9),
+    'title': ('Microsoft YaHei', 18, 'bold'),
+    'subtitle': ('Microsoft YaHei', 15),
+    'label': ('Microsoft YaHei', 13),
+    'label_bold': ('Microsoft YaHei', 13, 'bold'),
+    'small': ('Microsoft YaHei', 12),
+    'tiny': ('Microsoft YaHei', 11),
+    'mono': ('Consolas', 12),
+    'mono_small': ('Consolas', 11),
 }
 
 
