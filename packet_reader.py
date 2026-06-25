@@ -11,6 +11,7 @@ from typing import Optional, List, Generator, Callable
 from pathlib import Path
 
 from scapy.all import sniff, rdpcap, IP, ICMP, conf
+from utils import calculate_checksum
 
 
 class PacketReader:
@@ -336,8 +337,26 @@ def create_sample_icmp_packets() -> List[bytes]:
     echo_reply = bytes([0, 0]) + struct.pack('>H', checksum) + echo_reply[4:]
     samples.append(echo_reply)
     
-    dest_unreach = bytes([
-        3, 3,
+    dest_unreach_codes = [0, 1, 2, 3, 4, 5]
+    for code in dest_unreach_codes:
+        dest_unreach = bytes([
+            3, code,
+            0, 0,
+            0, 0,
+            0, 0,
+            0x45, 0x00, 0x00, 0x28,
+            0x00, 0x01, 0x00, 0x00,
+            0x40, 0x06, 0x00, 0x00,
+            192, 168, 1, 1,
+            192, 168, 1, 2,
+            0x00, 0x50, 0x00, 0x50, 0x00, 0x00, 0x00, 0x01
+        ])
+        checksum = calculate_checksum(dest_unreach)
+        dest_unreach = bytes([3, code]) + struct.pack('>H', checksum) + dest_unreach[4:]
+        samples.append(dest_unreach)
+    
+    source_quench = bytes([
+        4, 0,
         0, 0,
         0, 0,
         0, 0,
@@ -348,9 +367,26 @@ def create_sample_icmp_packets() -> List[bytes]:
         192, 168, 1, 2,
         0x00, 0x50, 0x00, 0x50, 0x00, 0x00, 0x00, 0x01
     ])
-    checksum = calculate_checksum(dest_unreach)
-    dest_unreach = bytes([3, 3]) + struct.pack('>H', checksum) + dest_unreach[4:]
-    samples.append(dest_unreach)
+    checksum = calculate_checksum(source_quench)
+    source_quench = bytes([4, 0]) + struct.pack('>H', checksum) + source_quench[4:]
+    samples.append(source_quench)
+    
+    redirect_codes = [0, 1, 2, 3]
+    for code in redirect_codes:
+        redirect = bytes([
+            5, code,
+            0, 0,
+            10, 0, 0, 10,
+            0x45, 0x00, 0x00, 0x28,
+            0x00, 0x01, 0x00, 0x00,
+            0x40, 0x06, 0x00, 0x00,
+            192, 168, 1, 1,
+            192, 168, 1, 2,
+            0x00, 0x50, 0x00, 0x50, 0x00, 0x00, 0x00, 0x01
+        ])
+        checksum = calculate_checksum(redirect)
+        redirect = bytes([5, code]) + struct.pack('>H', checksum) + redirect[4:]
+        samples.append(redirect)
     
     time_exceeded = bytes([
         11, 0,
@@ -368,23 +404,85 @@ def create_sample_icmp_packets() -> List[bytes]:
     time_exceeded = bytes([11, 0]) + struct.pack('>H', checksum) + time_exceeded[4:]
     samples.append(time_exceeded)
     
+    frag_reassembly_timeout = bytes([
+        11, 1,
+        0, 0,
+        0, 0,
+        0, 0,
+        0x45, 0x00, 0x05, 0xDC,
+        0x12, 0x34, 0x00, 0x01,
+        0x40, 0x06, 0x00, 0x00,
+        192, 168, 10, 10,
+        203, 0, 113, 1,
+        0x00, 0x50, 0x00, 0x50, 0x00, 0x00, 0x00, 0x01
+    ])
+    checksum = calculate_checksum(frag_reassembly_timeout)
+    frag_reassembly_timeout = bytes([11, 1]) + struct.pack('>H', checksum) + frag_reassembly_timeout[4:]
+    samples.append(frag_reassembly_timeout)
+    
+    parameter_problem = bytes([
+        12, 0,
+        0, 0,
+        0x08, 0x00,
+        0, 0,
+        0x45, 0x00, 0x00, 0x28,
+        0x00, 0x01, 0x00, 0x00,
+        0x40, 0x06, 0x00, 0x00,
+        192, 168, 1, 1,
+        192, 168, 1, 2,
+        0x00, 0x50, 0x00, 0x50, 0x00, 0x00, 0x00, 0x01
+    ])
+    checksum = calculate_checksum(parameter_problem)
+    parameter_problem = bytes([12, 0]) + struct.pack('>H', checksum) + parameter_problem[4:]
+    samples.append(parameter_problem)
+    
+    timestamp_request = bytes([
+        13, 0,
+        0, 0,
+        0x12, 0x34,
+        0x00, 0x01,
+        0, 0, 0, 0,
+        0, 0, 0, 0,
+        0, 0, 0, 0
+    ])
+    checksum = calculate_checksum(timestamp_request)
+    timestamp_request = bytes([13, 0]) + struct.pack('>H', checksum) + timestamp_request[4:]
+    samples.append(timestamp_request)
+    
+    timestamp_reply = bytes([
+        14, 0,
+        0, 0,
+        0x12, 0x34,
+        0x00, 0x01,
+        0x01, 0x02, 0x03, 0x04,
+        0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0A, 0x0B, 0x0C
+    ])
+    checksum = calculate_checksum(timestamp_reply)
+    timestamp_reply = bytes([14, 0]) + struct.pack('>H', checksum) + timestamp_reply[4:]
+    samples.append(timestamp_reply)
+    
+    info_request = bytes([
+        15, 0,
+        0, 0,
+        0x12, 0x34,
+        0x00, 0x01
+    ])
+    checksum = calculate_checksum(info_request)
+    info_request = bytes([15, 0]) + struct.pack('>H', checksum) + info_request[4:]
+    samples.append(info_request)
+    
+    info_reply = bytes([
+        16, 0,
+        0, 0,
+        0x12, 0x34,
+        0x00, 0x01
+    ])
+    checksum = calculate_checksum(info_reply)
+    info_reply = bytes([16, 0]) + struct.pack('>H', checksum) + info_reply[4:]
+    samples.append(info_reply)
+    
     return samples
-
-
-def calculate_checksum(data: bytes) -> int:
-    """计算校验和 (RFC1071)"""
-    if len(data) % 2 == 1:
-        data = data + b'\x00'
-    
-    checksum = 0
-    for i in range(0, len(data), 2):
-        word = (data[i] << 8) + data[i + 1]
-        checksum += word
-    
-    while checksum >> 16:
-        checksum = (checksum & 0xFFFF) + (checksum >> 16)
-    
-    return ~checksum & 0xFFFF
 
 
 def create_sample_pcap_file(output_path: str = "sample_icmp.pcap"):

@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any
 from enum import IntEnum
 
+from utils import calculate_checksum as util_calculate_checksum, \
+                  verify_checksum as util_verify_checksum, \
+                  format_ip_address
+
 
 class ICMPType(IntEnum):
     """ICMP报文类型枚举 (RFC792)"""
@@ -113,6 +117,19 @@ class ICMPAnalyzer:
         1: "分片重组超时 (Fragment Reassembly Time Exceeded)"
     }
     
+    # 重定向代码描述
+    REDIRECT_CODES = {
+        0: "重定向网络 (Redirect for Network)",
+        1: "重定向主机 (Redirect for Host)",
+        2: "重定向服务类型和网络 (Redirect for Type of Service and Network)",
+        3: "重定向服务类型和主机 (Redirect for Type of Service and Host)"
+    }
+    
+    # 参数问题代码描述
+    PARAMETER_PROBLEM_CODES = {
+        0: "指针指向错误 (Pointer Indicates the Error)"
+    }
+    
     def __init__(self):
         self.packet_count = 0
         self.type_stats: Dict[int, int] = {}
@@ -174,27 +191,11 @@ class ICMPAnalyzer:
     
     def calculate_checksum(self, data: bytes) -> int:
         """计算ICMP校验和 (RFC1071)"""
-        if len(data) % 2 == 1:
-            data = data + b'\x00'
-            
-        checksum = 0
-        for i in range(0, len(data), 2):
-            word = (data[i] << 8) + data[i + 1]
-            checksum += word
-            
-        # 将进位加到低位
-        while checksum >> 16:
-            checksum = (checksum & 0xFFFF) + (checksum >> 16)
-            
-        return ~checksum & 0xFFFF
+        return util_calculate_checksum(data)
     
     def verify_checksum(self, data: bytes, original_checksum: int) -> Tuple[int, bool]:
         """验证ICMP校验和"""
-        # 方法1: 将校验和字段置0后重新计算
-        # 创建校验和字段为0的数据副本
-        data_with_zero_checksum = bytes([data[0], data[1], 0, 0]) + data[4:]
-        calculated = self.calculate_checksum(data_with_zero_checksum)
-        return calculated, (calculated == original_checksum)
+        return util_verify_checksum(data, original_checksum)
     
     def analyze_echo(self, header: ICMPHeader) -> str:
         """分析Echo Request/Reply报文"""
@@ -236,6 +237,48 @@ class ICMPAnalyzer:
             result += f"\n  原始源: {original_ip.source_ip} -> 目标: {original_ip.dest_ip}"
             result += f", TTL: {original_ip.ttl}"
                 
+        return result
+    
+    def analyze_redirect(self, header: ICMPHeader, payload: bytes) -> str:
+        """分析重定向报文"""
+        code_desc = self.REDIRECT_CODES.get(header.code, f"未知代码 ({header.code})")
+        
+        gateway_ip = None
+        if len(payload) >= 4:
+            gateway_ip = format_ip_address(payload[:4])
+        
+        original_ip = None
+        if len(payload) >= 28:
+            original_ip = self.parse_ip_header(payload[4:24])
+            
+        result = f"重定向: {code_desc}"
+        if gateway_ip:
+            result += f"\n  建议网关: {gateway_ip}"
+        if original_ip:
+            result += f"\n  原始目标: {original_ip.dest_ip}"
+            
+        return result
+    
+    def analyze_parameter_problem(self, header: ICMPHeader, payload: bytes) -> str:
+        """分析参数问题报文"""
+        code_desc = self.PARAMETER_PROBLEM_CODES.get(header.code, f"未知代码 ({header.code})")
+        
+        pointer = None
+        if header.code == 0 and len(payload) >= 4:
+            pointer = payload[0]
+            
+        original_ip = None
+        if len(payload) >= 24:
+            offset = 4 if header.code == 0 else 0
+            if len(payload) >= offset + 20:
+                original_ip = self.parse_ip_header(payload[offset:offset+20])
+            
+        result = f"参数问题: {code_desc}"
+        if pointer is not None:
+            result += f"\n  错误指针: 第 {pointer} 字节"
+        if original_ip:
+            result += f"\n  原始源: {original_ip.source_ip} -> 目标: {original_ip.dest_ip}"
+            
         return result
     
     def is_query_message(self, icmp_type: int) -> bool:
@@ -315,6 +358,10 @@ class ICMPAnalyzer:
             return self.analyze_destination_unreachable(header, payload)
         elif header.type == ICMPType.TIME_EXCEEDED:
             return self.analyze_time_exceeded(header, payload)
+        elif header.type == ICMPType.REDIRECT:
+            return self.analyze_redirect(header, payload)
+        elif header.type == ICMPType.PARAMETER_PROBLEM:
+            return self.analyze_parameter_problem(header, payload)
         else:
             return type_desc
     

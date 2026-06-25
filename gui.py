@@ -89,6 +89,20 @@ class ICMPAnalyzerGUI:
         
         self._create_widgets()
         
+        self._bind_shortcuts()
+        
+    def _bind_shortcuts(self):
+        """绑定快捷键"""
+        self.root.bind('<Control-s>', lambda e: self._start_analysis())
+        self.root.bind('<Control-S>', lambda e: self._start_analysis())
+        self.root.bind('<Control-p>', lambda e: self._stop_analysis())
+        self.root.bind('<Control-P>', lambda e: self._stop_analysis())
+        self.root.bind('<Control-c>', lambda e: self._clear_results())
+        self.root.bind('<Control-C>', lambda e: self._clear_results())
+        self.root.bind('<Control-e>', lambda e: self._export_results())
+        self.root.bind('<Control-E>', lambda e: self._export_results())
+        self.root.bind('<Escape>', lambda e: self.root.quit())
+        
     def _create_widgets(self):
         """创建界面组件"""
         # 主容器
@@ -103,17 +117,17 @@ class ICMPAnalyzerGUI:
         body.pack(fill=tk.BOTH, expand=True, padx=16, pady=(8, 16))
         
         # 左右分割面板
-        paned = tk.PanedWindow(body, orient=tk.HORIZONTAL, bg=COLORS['bg_main'],
-                              sashrelief=tk.FLAT, sashwidth=4)
+        paned = ttk.PanedWindow(body, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True)
         
         # 左侧控制面板
-        left_panel = tk.Frame(paned, bg=COLORS['bg_card'])
-        paned.add(left_panel, width=320)
+        left_panel = tk.Frame(paned, bg=COLORS['bg_card'], width=440)
+        left_panel.pack_propagate(False)  # 固定宽度，不随内容变化
+        paned.add(left_panel, weight=0)
         
         # 右侧主显示区
         right_panel = tk.Frame(paned, bg=COLORS['bg_main'])
-        paned.add(right_panel, width=1040)
+        paned.add(right_panel, weight=1)
         
         self._create_left_panel(left_panel)
         self._create_right_panel(right_panel)
@@ -158,7 +172,6 @@ class ICMPAnalyzerGUI:
         nav_commands = {
             '控制': self._show_control_menu,
             '统计': self._show_statistics,
-            '工具': self._show_tools_menu,
             '帮助': self._show_help
         }
         for text, command in nav_commands.items():
@@ -167,6 +180,33 @@ class ICMPAnalyzerGUI:
                            font=FONTS['label'], relief=tk.FLAT, cursor='hand2',
                            padx=12, pady=4, command=command)
             btn.pack(side=tk.LEFT, padx=4)
+            if text == '控制':
+                self.control_btn = btn
+        
+        # 工具按钮（含下拉箭头，跟随导航按钮风格）
+        self.tools_container = tk.Frame(right_frame, bg=COLORS['bg_main'])
+        self.tools_container.pack(side=tk.LEFT, padx=4)
+        
+        self.tools_btn = tk.Button(
+            self.tools_container,
+            text='工具',
+            bg=COLORS['bg_main'], fg=COLORS['text_secondary'],
+            font=FONTS['label'], relief=tk.FLAT, cursor='hand2',
+            padx=0, pady=4, bd=0,
+            command=self._show_tools_menu
+        )
+        self.tools_btn.pack(side=tk.LEFT)
+        
+        tools_arrow = tk.Button(
+            self.tools_container,
+            text='\u25be',
+            font=('Microsoft YaHei', 10),
+            bg=COLORS['bg_main'], fg=COLORS['text_secondary'],
+            relief=tk.FLAT, cursor='hand2',
+            padx=2, pady=4, bd=0,
+            command=self._show_tools_menu
+        )
+        tools_arrow.pack(side=tk.LEFT, padx=(0, 12))
             
         # Dark主题切换按钮
         dark_btn = tk.Button(right_frame, text="Dark", 
@@ -233,6 +273,15 @@ class ICMPAnalyzerGUI:
                                    highlightbackground=COLORS['border'])
         self.file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=6)
         self.file_entry.insert(0, "选择 .pcap 文件...")
+        
+        self.file_paths: List[str] = []
+        
+        self.batch_btn = tk.Button(path_frame, text="批量导入",
+                 bg=COLORS['accent_blue'], fg='white',
+                 font=FONTS['small'], relief=tk.FLAT,
+                 cursor='hand2',
+                 command=self._batch_import_files)
+        self.batch_btn.pack(side=tk.RIGHT, padx=(4, 0))
         
         self.browse_btn = tk.Button(path_frame, text="浏览",
                               bg=COLORS['accent_blue'], fg='white',
@@ -392,14 +441,17 @@ class ICMPAnalyzerGUI:
         if mode == "live":
             self.file_entry.config(state=tk.DISABLED)
             self.browse_btn.config(state=tk.DISABLED)
+            self.batch_btn.config(state=tk.DISABLED)
             self.interface_label.config(state=tk.NORMAL)
         elif mode == "offline":
             self.file_entry.config(state=tk.NORMAL)
             self.browse_btn.config(state=tk.NORMAL)
+            self.batch_btn.config(state=tk.NORMAL)
             self.interface_label.config(state=tk.DISABLED)
         else:
             self.file_entry.config(state=tk.DISABLED)
             self.browse_btn.config(state=tk.DISABLED)
+            self.batch_btn.config(state=tk.DISABLED)
             self.interface_label.config(state=tk.DISABLED)
             
     def _create_right_panel(self, parent):
@@ -457,17 +509,131 @@ class ICMPAnalyzerGUI:
         # 数据列表（初始隐藏）
         self.data_frame = tk.Frame(main_card, bg=COLORS['bg_card'])
         
+        # 搜索和过滤栏
+        search_frame = tk.Frame(self.data_frame, bg=COLORS['bg_card'])
+        search_frame.pack(fill=tk.X, padx=12, pady=(12, 0))
+        
+        tk.Label(search_frame, text="搜索:", font=FONTS['label'], 
+                 fg=COLORS['text_secondary'], bg=COLORS['bg_card']).pack(side=tk.LEFT, padx=(0, 6))
+        
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(search_frame, textvariable=self.search_var, 
+                                     font=FONTS['label'], width=24,
+                                     bg=COLORS['bg_highlight'], fg=COLORS['text_primary'],
+                                     relief=tk.FLAT)
+        self.search_entry.pack(side=tk.LEFT)
+        self.search_var.trace('w', lambda *args: self._filter_packets())
+        
+        # 搜索字段选择器
+        self.search_field_var = tk.StringVar(value="全部")
+        search_fields = ["全部", "序号", "类型", "代码", "校验和", "标识符", 
+                        "序列号", "源IP", "目的IP", "分类"]
+        
+        self.search_field_container = tk.Frame(search_frame, bg=COLORS['bg_card'])
+        self.search_field_container.pack(side=tk.LEFT, padx=(4, 12))
+        
+        self.search_field_btn = tk.Button(
+            self.search_field_container,
+            textvariable=self.search_field_var,
+            font=('Microsoft YaHei', 12),
+            bg=COLORS['bg_highlight'], fg=COLORS['text_secondary'],
+            activebackground=COLORS['bg_highlight'], activeforeground=COLORS['text_secondary'],
+            relief=tk.FLAT, cursor='hand2',
+            padx=8, pady=3, bd=0,
+            command=self._show_search_field_menu
+        )
+        self.search_field_btn.pack(side=tk.LEFT)
+        
+        sf_arrow = tk.Button(
+            self.search_field_container,
+            text='\u25be',
+            font=('Microsoft YaHei', 8),
+            bg=COLORS['bg_highlight'], fg=COLORS['text_secondary'],
+            relief=tk.FLAT, cursor='hand2',
+            padx=2, pady=3, bd=0,
+            command=self._show_search_field_menu
+        )
+        sf_arrow.pack(side=tk.LEFT, padx=(0, 4))
+        
+        self.search_field_menu = tk.Menu(self.root, tearoff=0,
+                                         font=('Microsoft YaHei', 12),
+                                         bg='white', fg=COLORS['text_primary'],
+                                         activebackground=COLORS['accent_light'],
+                                         activeforeground=COLORS['accent_blue'])
+        for f in search_fields:
+            self.search_field_menu.add_command(label=f, font=('Microsoft YaHei', 12),
+                                               command=lambda opt=f: self._select_search_field(opt))
+        
+        # 过滤标签
+        filter_label = tk.Label(search_frame, text="过滤", font=FONTS['label'], 
+                                fg=COLORS['text_secondary'], bg=COLORS['bg_card'])
+        filter_label.pack(side=tk.LEFT, padx=(16, 6))
+        
+        self.filter_var = tk.StringVar(value="全部")
+        filter_options = ["全部", "查询报文", "差错报文", 
+                         "Echo Request", "Echo Reply", 
+                         "Destination Unreachable", "Time Exceeded", 
+                         "Redirect", "Parameter Problem"]
+        
+        # 美化过滤下拉按钮（圆角风格）
+        self.filter_container = tk.Frame(search_frame, bg=COLORS['bg_card'])
+        self.filter_container.pack(side=tk.LEFT)
+        
+        self.filter_btn = tk.Button(
+            self.filter_container,
+            textvariable=self.filter_var,
+            font=('Microsoft YaHei', 13),
+            bg=COLORS['bg_highlight'], fg=COLORS['accent_blue'],
+            activebackground=COLORS['accent_light'], activeforeground=COLORS['accent_blue'],
+            relief=tk.FLAT, cursor='hand2',
+            padx=14, pady=6,
+            bd=0,
+            command=self._show_filter_menu
+        )
+        self.filter_btn.pack(side=tk.LEFT)
+        
+        # 下拉箭头
+        arrow_btn = tk.Button(
+            self.filter_container,
+            text='\u25be',  # ▾
+            font=('Microsoft YaHei', 10),
+            bg=COLORS['bg_highlight'], fg=COLORS['accent_blue'],
+            activebackground=COLORS['accent_light'], activeforeground=COLORS['accent_blue'],
+            relief=tk.FLAT, cursor='hand2',
+            padx=2, pady=6,
+            bd=0,
+            command=self._show_filter_menu
+        )
+        arrow_btn.pack(side=tk.LEFT, padx=(0, 8))
+        
+        def on_hover_enter(e):
+            self.filter_btn.config(bg=COLORS['accent_light'])
+            arrow_btn.config(bg=COLORS['accent_light'])
+        def on_hover_leave(e):
+            self.filter_btn.config(bg=COLORS['bg_highlight'])
+            arrow_btn.config(bg=COLORS['bg_highlight'])
+        
+        self.filter_btn.bind('<Enter>', on_hover_enter)
+        self.filter_btn.bind('<Leave>', on_hover_leave)
+        arrow_btn.bind('<Enter>', on_hover_enter)
+        arrow_btn.bind('<Leave>', on_hover_leave)
+        
+        self.filter_menu = tk.Menu(self.root, tearoff=0,
+                                   font=('Microsoft YaHei', 13),
+                                   bg='white', fg=COLORS['text_primary'],
+                                   activebackground=COLORS['accent_light'],
+                                   activeforeground=COLORS['accent_blue'])
+        for option in filter_options:
+            self.filter_menu.add_command(label=option, font=('Microsoft YaHei', 13),
+                                        command=lambda opt=option: self._select_filter(opt))
+        
         # 报文列表
         list_frame = tk.Frame(self.data_frame, bg=COLORS['bg_card'])
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 12))
         
         tree_style = ttk.Style()
         tree_style.configure('Treeview', font=('Microsoft YaHei', 14), rowheight=35)
         tree_style.configure('Treeview.Heading', font=('Microsoft YaHei', 14, 'bold'))
-        tree_style.configure('TCombobox', font=('Microsoft YaHei', 14))
-        tree_style.map('TCombobox',
-                       selectbackground=[('readonly', COLORS['accent_blue'])],
-                       selectforeground=[('readonly', 'white')])
         
         columns = ('序号', '类型', '代码', '校验和', '标识符', '序列号', '源IP', '目的IP', '分类')
         self.packet_tree = ttk.Treeview(list_frame, columns=columns, 
@@ -632,24 +798,30 @@ class ICMPAnalyzerGUI:
         
         for ptype, count in type_dist.items():
             desc = self.analyzer.TYPE_DESCRIPTIONS.get(ptype, f"类型 {ptype}")
-            labels.append(desc)
+            # 将标签在括号前换行：英文部分 + 换行 + 中文括号部分
+            if ' (' in desc:
+                en_part, cn_part = desc.split(' (', 1)
+                short_label = en_part + '\n(' + cn_part
+            else:
+                short_label = desc
+            labels.append(short_label)
             counts.append(count)
             colors.append(type_colors.get(ptype, '#95a5a6'))
         
-        fig, ax = plt.subplots(figsize=(7, 3.5), dpi=100)
+        fig, ax = plt.subplots(figsize=(16, 4.8), dpi=100)
         fig.patch.set_facecolor('white')
         
         bars = ax.bar(range(len(labels)), counts, color=colors, 
-                     edgecolor='none', width=0.6)
+                     edgecolor='none', width=0.5)
         
         ax.set_xlabel('ICMP类型', fontsize=13, fontfamily='Microsoft YaHei')
         ax.set_ylabel('数量', fontsize=13, fontfamily='Microsoft YaHei')
         ax.set_title('ICMP报文类型分布', fontsize=15, fontweight='bold',
-                    fontfamily='Microsoft YaHei', pad=20)
+                    fontfamily='Microsoft YaHei', pad=15)
         ax.set_ylim(0, max(counts) * 1.3)
         ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=0, ha='center', fontsize=12,
-                          fontfamily='Microsoft YaHei')
+        ax.set_xticklabels(labels, rotation=0, ha='center', fontsize=9,
+                          fontfamily='Microsoft YaHei', linespacing=1.3)
         ax.tick_params(axis='both', labelsize=11)
         
         for bar in bars:
@@ -662,7 +834,10 @@ class ICMPAnalyzerGUI:
         ax.spines['left'].set_color('#d1d8e0')
         ax.spines['bottom'].set_color('#d1d8e0')
         
-        fig.subplots_adjust(top=0.8, bottom=0.28)
+        fig.subplots_adjust(top=0.85, bottom=0.42)
+        
+        if hasattr(self, 'stats_canvas'):
+            self.stats_canvas.get_tk_widget().pack_forget()
         
         self.stats_canvas = FigureCanvasTkAgg(fig, master=self.stats_frame)
         self.stats_canvas.draw()
@@ -682,8 +857,27 @@ class ICMPAnalyzerGUI:
     def _clear_file_path(self):
         """清除文件路径"""
         self.file_path_var.set("")
+        self.file_paths.clear()
         self.file_entry.delete(0, tk.END)
         self.file_entry.insert(0, "选择 .pcap 文件...")
+        
+    def _batch_import_files(self):
+        """批量导入文件"""
+        file_paths = filedialog.askopenfilenames(
+            title="选择多个pcap文件",
+            filetypes=[("PCAP文件", "*.pcap"), ("PCAPNG文件", "*.pcapng"), ("所有文件", "*.*")]
+        )
+        if file_paths:
+            self.file_paths = list(file_paths)
+            if len(file_paths) == 1:
+                self.file_path_var.set(file_paths[0])
+                self.file_entry.delete(0, tk.END)
+                self.file_entry.insert(0, file_paths[0])
+            else:
+                display_text = f"已选择 {len(file_paths)} 个文件"
+                self.file_path_var.set(display_text)
+                self.file_entry.delete(0, tk.END)
+                self.file_entry.insert(0, display_text)
         
     def _show_data_view(self):
         """显示数据视图"""
@@ -704,15 +898,41 @@ class ICMPAnalyzerGUI:
         mode = self.mode_var.get()
         
         if mode == "offline":
-            file_path = self.file_path_var.get()
-            if not file_path or file_path == "选择 .pcap 文件...":
-                messagebox.showwarning("提示", "请先选择pcap文件")
-                return
-            self._start_offline_analysis(file_path)
+            if self.file_paths:
+                self._start_offline_analysis_batch(self.file_paths)
+            else:
+                file_path = self.file_path_var.get()
+                if not file_path or file_path == "选择 .pcap 文件...":
+                    messagebox.showwarning("提示", "请先选择pcap文件")
+                    return
+                self._start_offline_analysis(file_path)
         elif mode == "live":
             self._start_live_capture()
         elif mode == "sample":
             self._start_sample_analysis()
+            
+    def _start_offline_analysis_batch(self, file_paths: List[str]):
+        """批量离线分析"""
+        self._clear_results()
+        self._show_data_view()
+        
+        try:
+            count = 0
+            for file_path in file_paths:
+                reader = OfflinePacketReader(file_path)
+                for packet_data in reader.read():
+                    result = self.analyzer.analyze_packet(packet_data)
+                    if result:
+                        self.packets.append(result)
+                        self._add_packet_to_tree(result, count + 1)
+                        count += 1
+                        
+            self.total_count_var.set(f"报文总数: {count}")
+            self.status_var.set(f"✓ 分析完成 ({len(file_paths)}个文件)")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"分析失败: {e}")
+            self.status_var.set("✗ 分析失败")
             
     def _start_offline_analysis(self, file_path: str):
         """开始离线分析"""
@@ -917,6 +1137,73 @@ ICMP报文分析统计报告
         for index, (_, item) in enumerate(items):
             self.packet_tree.move(item, '', index)
             
+    def _show_search_field_menu(self):
+        """显示搜索字段选择菜单"""
+        x = self.search_field_container.winfo_rootx()
+        y = self.search_field_container.winfo_rooty() + self.search_field_container.winfo_height()
+        self.search_field_menu.tk_popup(x, y)
+
+    def _select_search_field(self, field):
+        """选择搜索字段"""
+        self.search_field_var.set(field)
+        self._filter_packets()
+
+    def _show_filter_menu(self):
+        """显示过滤菜单"""
+        x = self.filter_btn.winfo_rootx()
+        y = self.filter_btn.winfo_rooty() + self.filter_btn.winfo_height()
+        self.filter_menu.tk_popup(x, y)
+        
+    def _select_filter(self, option):
+        """选择过滤选项"""
+        self.filter_var.set(option)
+        self._filter_packets()
+        
+    # 搜索字段 → 列索引映射
+    SEARCH_FIELD_INDEX = {
+        '序号': 0, '类型': 1, '代码': 2, '校验和': 3,
+        '标识符': 4, '序列号': 5, '源IP': 6, '目的IP': 7, '分类': 8
+    }
+
+    def _filter_packets(self):
+        """过滤和搜索报文"""
+        search_text = self.search_var.get().lower()
+        filter_type = self.filter_var.get()
+        search_field = self.search_field_var.get()
+        
+        for item in self.packet_tree.get_children():
+            values = self.packet_tree.item(item, 'values')
+            visible = True
+            
+            if search_text:
+                if search_field == '全部':
+                    # 全局搜索：匹配任意列
+                    match_found = any(search_text in str(v).lower() for v in values)
+                else:
+                    idx = self.SEARCH_FIELD_INDEX.get(search_field)
+                    match_found = search_text in str(values[idx]).lower() if idx is not None else True
+                if not match_found:
+                    visible = False
+                    
+            if filter_type != "全部" and visible:
+                packet_type = str(values[1])
+                category = str(values[8])
+                
+                if filter_type == "查询报文" and category != "查询报文":
+                    visible = False
+                elif filter_type == "差错报文" and category != "差错报文":
+                    visible = False
+                elif filter_type in ["Echo Request", "Echo Reply", 
+                                     "Destination Unreachable", "Time Exceeded", 
+                                     "Redirect", "Parameter Problem"]:
+                    if filter_type not in packet_type:
+                        visible = False
+                        
+            self.packet_tree.item(item, tags=('visible',) if visible else ('hidden',))
+            
+        self.packet_tree.tag_configure('hidden', foreground='#bdc3c7')
+        self.packet_tree.tag_configure('visible', foreground=COLORS['text_primary'])
+            
     def _copy_all(self):
         """复制全部数据"""
         if not self.packets:
@@ -933,22 +1220,34 @@ ICMP报文分析统计报告
         
     def _show_control_menu(self):
         """显示控制菜单"""
-        menu = tk.Menu(self.root, tearoff=0)
+        menu = tk.Menu(self.root, tearoff=0,
+                       font=('Microsoft YaHei', 13),
+                       bg='white', fg=COLORS['text_primary'],
+                       activebackground=COLORS['accent_light'],
+                       activeforeground=COLORS['accent_blue'])
         menu.add_command(label="开始分析", command=self._start_analysis)
         menu.add_command(label="停止分析", command=self._stop_analysis)
         menu.add_separator()
         menu.add_command(label="清空结果", command=self._clear_results)
         menu.add_command(label="退出", command=self.root.quit)
-        menu.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
-        
+        x = self.control_btn.winfo_rootx()
+        y = self.control_btn.winfo_rooty() + self.control_btn.winfo_height()
+        menu.tk_popup(x, y)
+
     def _show_tools_menu(self):
         """显示工具菜单"""
-        menu = tk.Menu(self.root, tearoff=0)
+        menu = tk.Menu(self.root, tearoff=0,
+                       font=('Microsoft YaHei', 13),
+                       bg='white', fg=COLORS['text_primary'],
+                       activebackground=COLORS['accent_light'],
+                       activeforeground=COLORS['accent_blue'])
         menu.add_command(label="生成报告", command=self._show_statistics)
         menu.add_command(label="导出结果", command=self._export_results)
         menu.add_separator()
         menu.add_command(label="选择网卡", command=self._select_interface)
-        menu.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
+        x = self.tools_container.winfo_rootx()
+        y = self.tools_container.winfo_rooty() + self.tools_container.winfo_height()
+        menu.tk_popup(x, y)
         
     def _show_help(self):
         """显示帮助信息"""
