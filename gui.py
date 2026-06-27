@@ -95,8 +95,8 @@ class ICMPAnalyzerGUI:
         """绑定快捷键"""
         self.root.bind('<Control-s>', lambda e: self._start_analysis())
         self.root.bind('<Control-S>', lambda e: self._start_analysis())
-        self.root.bind('<Control-p>', lambda e: self._stop_analysis())
-        self.root.bind('<Control-P>', lambda e: self._stop_analysis())
+        self.root.bind('<Control-p>', lambda e: self._stop_capture())
+        self.root.bind('<Control-P>', lambda e: self._stop_capture())
         self.root.bind('<Control-c>', lambda e: self._clear_results())
         self.root.bind('<Control-C>', lambda e: self._clear_results())
         self.root.bind('<Control-e>', lambda e: self._export_results())
@@ -527,7 +527,7 @@ class ICMPAnalyzerGUI:
         # 搜索字段选择器
         self.search_field_var = tk.StringVar(value="全部")
         search_fields = ["全部", "序号", "类型", "代码", "校验和", "标识符", 
-                        "序列号", "源IP", "目的IP", "分类"]
+                        "序列号", "源IP", "目的IP", "分类", "验证"]
         
         self.search_field_container = tk.Frame(search_frame, bg=COLORS['bg_card'])
         self.search_field_container.pack(side=tk.LEFT, padx=(4, 12))
@@ -635,12 +635,15 @@ class ICMPAnalyzerGUI:
         tree_style.configure('Treeview', font=('Microsoft YaHei', 14), rowheight=35)
         tree_style.configure('Treeview.Heading', font=('Microsoft YaHei', 14, 'bold'))
         
-        columns = ('序号', '类型', '代码', '校验和', '标识符', '序列号', '源IP', '目的IP', '分类')
+        columns = ('序号', '类型', '代码', '校验和', '标识符', '序列号', '源IP', '目的IP', '分类', '验证')
         self.packet_tree = ttk.Treeview(list_frame, columns=columns, 
                                         show='headings', height=12)
         
-        col_widths = {'序号': 80, '类型': 200, '代码': 80, '校验和': 110, 
-                     '标识符': 90, '序列号': 90, '源IP': 150, '目的IP': 150, '分类': 110}
+        col_widths = {
+            '序号': 70, '类型': 180, '代码': 70, '校验和': 100, 
+            '标识符': 80, '序列号': 80, '源IP': 130, '目的IP': 130, 
+            '分类': 90, '验证': 80
+        }
         for col in columns:
             self.packet_tree.heading(col, text=col, 
                                     command=lambda c=col: self._sort_tree(c))
@@ -1050,8 +1053,14 @@ class ICMPAnalyzerGUI:
         
         category = "查询报文" if self.analyzer.is_query_message(packet.header.type) else "差错报文"
         
+        # 校验和验证状态
+        if packet.checksum_valid:
+            verify_status = "✅ 通过"
+        else:
+            verify_status = "❌ 失败"
+        
         self.packet_tree.insert('', tk.END, values=(
-            index, type_name, code_str, checksum, ident, seq, src_ip, dst_ip, category
+            index, type_name, code_str, checksum, ident, seq, src_ip, dst_ip, category, verify_status
         ))
         
     def _on_packet_select(self, event):
@@ -1071,8 +1080,32 @@ class ICMPAnalyzerGUI:
         self.fields_text.config(state=tk.NORMAL)
         self.fields_text.delete(1.0, tk.END)
         
+        # 配置文本标签颜色
+        self.fields_text.tag_config('checksum_pass', background='#e8f8f0', foreground='#27ae60')
+        self.fields_text.tag_config('checksum_fail', background='#fde8e8', foreground='#e74c3c')
+        self.fields_text.tag_config('header', font=('Microsoft YaHei', 14, 'bold'))
+        
         output = self.analyzer.format_output(packet)
-        self.fields_text.insert(tk.END, output)
+        
+        # 逐行插入，并为校验和相关行添加高亮
+        lines = output.split('\n')
+        for line in lines:
+            if '校验和验证' in line:
+                if '通过' in line:
+                    self.fields_text.insert(tk.END, line + '\n', 'checksum_pass')
+                else:
+                    self.fields_text.insert(tk.END, line + '\n', 'checksum_fail')
+            elif '校验和' in line or '计算校验和' in line:
+                if packet.checksum_valid:
+                    self.fields_text.insert(tk.END, line + '\n', 'checksum_pass')
+                else:
+                    self.fields_text.insert(tk.END, line + '\n', 'checksum_fail')
+            else:
+                if line.startswith('==') or line.startswith('【'):
+                    self.fields_text.insert(tk.END, line + '\n', 'header')
+                else:
+                    self.fields_text.insert(tk.END, line + '\n')
+        
         self.fields_text.config(state=tk.DISABLED)
         
         self.raw_text.config(state=tk.NORMAL)
@@ -1162,7 +1195,7 @@ ICMP报文分析统计报告
     # 搜索字段 → 列索引映射
     SEARCH_FIELD_INDEX = {
         '序号': 0, '类型': 1, '代码': 2, '校验和': 3,
-        '标识符': 4, '序列号': 5, '源IP': 6, '目的IP': 7, '分类': 8
+        '标识符': 4, '序列号': 5, '源IP': 6, '目的IP': 7, '分类': 8, '验证': 9
     }
 
     def _filter_packets(self):
@@ -1226,7 +1259,7 @@ ICMP报文分析统计报告
                        activebackground=COLORS['accent_light'],
                        activeforeground=COLORS['accent_blue'])
         menu.add_command(label="开始分析", command=self._start_analysis)
-        menu.add_command(label="停止分析", command=self._stop_analysis)
+        menu.add_command(label="停止分析", command=self._stop_capture)
         menu.add_separator()
         menu.add_command(label="清空结果", command=self._clear_results)
         menu.add_command(label="退出", command=self.root.quit)
@@ -1266,8 +1299,9 @@ ICMP报文分析统计报告
 
 快捷键：
 - Ctrl+S：开始/停止分析
+- Ctrl+P：停止抓包
 - Ctrl+C：清空结果
-- Ctrl+R：生成报告
+- Ctrl+E：导出为CSV文件
 
 版本：v2.0
 作者：ICMP Analyzer Team"""
@@ -1287,19 +1321,21 @@ ICMP报文分析统计报告
             messagebox.showwarning("导出结果", "暂无数据可导出")
             return
         file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("文本文件", "*.txt"), ("CSV文件", "*.csv"), ("所有文件", "*.*")]
+            defaultextension=".csv",
+            filetypes=[("CSV文件", "*.csv"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
         )
         if file_path:
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write("序号,类型,代码,校验和,标识符,序列号,源IP,目的IP,分类\n")
+                    f.write("\ufeff")  # BOM，解决Excel打开CSV中文乱码
+                    f.write("序号,类型,代码,校验和,校验通过,标识符,序列号,源IP,目的IP,分类\n")
                     for i, packet in enumerate(self.packets, 1):
                         type_name = self.analyzer.TYPE_DESCRIPTIONS.get(packet.header.type, f"类型 {packet.header.type}")
                         category = "查询报文" if self.analyzer.is_query_message(packet.header.type) else "差错报文"
                         src_ip = packet.original_ip_header.source_ip if packet.original_ip_header else "-"
                         dst_ip = packet.original_ip_header.dest_ip if packet.original_ip_header else "-"
-                        f.write(f"{i},{type_name},{packet.header.code},{hex(packet.header.checksum)},")
+                        valid = "通过" if packet.checksum_valid else "失败"
+                        f.write(f"{i},{type_name},{packet.header.code},{hex(packet.header.checksum)},{valid},")
                         f.write(f"{packet.header.identifier},{packet.header.sequence},{src_ip},{dst_ip},{category}\n")
                 messagebox.showinfo("导出成功", f"结果已导出到：{file_path}")
             except Exception as e:

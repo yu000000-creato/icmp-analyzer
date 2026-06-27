@@ -344,6 +344,7 @@ def create_sample_icmp_packets() -> List[bytes]:
             0, 0,
             0, 0,
             0, 0,
+            0, 0, 0, 0,
             0x45, 0x00, 0x00, 0x28,
             0x00, 0x01, 0x00, 0x00,
             0x40, 0x06, 0x00, 0x00,
@@ -360,6 +361,7 @@ def create_sample_icmp_packets() -> List[bytes]:
         0, 0,
         0, 0,
         0, 0,
+        0, 0, 0, 0,
         0x45, 0x00, 0x00, 0x28,
         0x00, 0x01, 0x00, 0x00,
         0x40, 0x06, 0x00, 0x00,
@@ -393,6 +395,7 @@ def create_sample_icmp_packets() -> List[bytes]:
         0, 0,
         0, 0,
         0, 0,
+        0, 0, 0, 0,
         0x45, 0x00, 0x00, 0x28,
         0x00, 0x01, 0x00, 0x00,
         0x01, 0x06, 0x00, 0x00,
@@ -409,6 +412,7 @@ def create_sample_icmp_packets() -> List[bytes]:
         0, 0,
         0, 0,
         0, 0,
+        0, 0, 0, 0,
         0x45, 0x00, 0x05, 0xDC,
         0x12, 0x34, 0x00, 0x01,
         0x40, 0x06, 0x00, 0x00,
@@ -425,6 +429,7 @@ def create_sample_icmp_packets() -> List[bytes]:
         0, 0,
         0x08, 0x00,
         0, 0,
+        0, 0, 0, 0,
         0x45, 0x00, 0x00, 0x28,
         0x00, 0x01, 0x00, 0x00,
         0x40, 0x06, 0x00, 0x00,
@@ -481,6 +486,31 @@ def create_sample_icmp_packets() -> List[bytes]:
     checksum = calculate_checksum(info_reply)
     info_reply = bytes([16, 0]) + struct.pack('>H', checksum) + info_reply[4:]
     samples.append(info_reply)
+    
+    # ========== 人为制造校验和错误的报文（用于测试校验和验证功能）==========
+    # 取前 3 个正确报文，篡改其校验和字段
+    corrupted_count = 0
+    for i in range(min(3, len(samples))):
+        correct_packet = samples[i]
+        # 篡改校验和字段（字节 2 和 3）
+        corrupted = bytearray(correct_packet)
+        # 将校验和字段改为 0xFFFF（错误值）
+        corrupted[2] = 0xFF
+        corrupted[3] = 0xFF
+        samples.append(bytes(corrupted))
+        corrupted_count += 1
+    
+    # 再制造一个：修改报文内容但不改校验和（模拟传输错误）
+    if len(samples) >= 4:
+        correct_packet = samples[3]
+        corrupted = bytearray(correct_packet)
+        # 修改数据部分的一个字节（不影响校验和字段）
+        if len(corrupted) > 8:
+            corrupted[8] = (corrupted[8] + 1) % 256  # 修改数据部分
+        samples.append(bytes(corrupted))
+        corrupted_count += 1
+    
+    print(f"[INFO] 测试样本生成完成：{len(samples) - corrupted_count} 个正确报文，{corrupted_count} 个校验和错误报文")
     
     return samples
 

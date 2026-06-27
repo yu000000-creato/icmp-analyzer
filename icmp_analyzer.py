@@ -209,10 +209,10 @@ class ICMPAnalyzer:
         """分析目的不可达报文"""
         code_desc = self.UNREACHABLE_CODES.get(header.code, f"未知代码 ({header.code})")
         
-        # 解析原始IP首部（差错报文包含原始IP首部+前8字节数据）
+        # RFC 792: 差错报文载荷 = 4字节未使用 + 原始IP首部(20字节) + 原始数据前8字节
         original_ip = None
-        if len(payload) >= 28:  # 20字节IP首部 + 8字节数据
-            original_ip = self.parse_ip_header(payload[:20])
+        if len(payload) >= 28:
+            original_ip = self.parse_ip_header(payload[4:24])
             
         result = f"目的不可达: {code_desc}"
         if original_ip:
@@ -228,9 +228,10 @@ class ICMPAnalyzer:
         """分析超时报文"""
         code_desc = self.TIME_EXCEEDED_CODES.get(header.code, f"未知代码 ({header.code})")
         
+        # RFC 792: 差错报文载荷 = 4字节未使用 + 原始IP首部(20字节) + 原始数据前8字节
         original_ip = None
         if len(payload) >= 28:
-            original_ip = self.parse_ip_header(payload[:20])
+            original_ip = self.parse_ip_header(payload[4:24])
             
         result = f"超时: {code_desc}"
         if original_ip:
@@ -243,13 +244,14 @@ class ICMPAnalyzer:
         """分析重定向报文"""
         code_desc = self.REDIRECT_CODES.get(header.code, f"未知代码 ({header.code})")
         
-        gateway_ip = None
-        if len(payload) >= 4:
-            gateway_ip = format_ip_address(payload[:4])
+        gateway_ip = format_ip_address(
+            bytes([(header.identifier >> 8) & 0xFF, header.identifier & 0xFF, 
+                   (header.sequence >> 8) & 0xFF, header.sequence & 0xFF])
+        )
         
         original_ip = None
-        if len(payload) >= 28:
-            original_ip = self.parse_ip_header(payload[4:24])
+        if len(payload) >= 20:
+            original_ip = self.parse_ip_header(payload[:20])
             
         result = f"重定向: {code_desc}"
         if gateway_ip:
@@ -317,11 +319,20 @@ class ICMPAnalyzer:
         calculated_checksum, checksum_valid = self.verify_checksum(raw_data, header.checksum)
         
         # 解析原始IP首部（差错报文）
+        # RFC 792: 
+        # - 大部分差错报文载荷 = 4字节未使用 + 原始IP首部(20字节) + 原始数据前8字节
+        # - Redirect报文载荷 = 4字节网关IP + 原始IP首部(20字节) + 原始数据前8字节
         original_ip = None
         original_data = b''
-        if self.is_error_message(header.type) and len(payload) >= 28:
-            original_ip = self.parse_ip_header(payload[:20])
-            original_data = payload[20:28]
+        if self.is_error_message(header.type):
+            if header.type == ICMPType.REDIRECT:
+                if len(payload) >= 24:
+                    original_ip = self.parse_ip_header(payload[:20])
+                    original_data = payload[20:28]
+            else:
+                if len(payload) >= 28:
+                    original_ip = self.parse_ip_header(payload[4:24])
+                    original_data = payload[24:32]
         
         # 生成描述
         description = self._generate_description(header, payload)
